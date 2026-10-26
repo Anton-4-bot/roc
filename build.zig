@@ -6526,8 +6526,11 @@ const supported_deps_triples = std.StaticStringMap([]const u8).initComptime(.{
     .{ "aarch64-windows-gnu", "aarch64_windows_gnu" },
     .{ "arm-linux-musleabihf", "arm_linux_musleabihf" },
     .{ "x86-linux-musl", "x86_linux_musl" },
+    .{ "x86_64-freebsd-none", "x86_64_freebsd_none" },
     .{ "x86_64-linux-musl", "x86_64_linux_musl" },
     .{ "x86_64-macos-none", "x86_64_macos_none" },
+    .{ "x86_64-netbsd-none", "x86_64_netbsd_none" },
+    .{ "x86_64-openbsd-none", "x86_64_openbsd_none" },
     .{ "x86_64-windows-gnu", "x86_64_windows_gnu" },
     // We also support the gnu linux targets.
     // For those, we just map to musl.
