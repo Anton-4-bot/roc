@@ -307,9 +307,12 @@ fn linkWatchPlatformLibs(step: *Step.Compile, target: ResolvedTarget) void {
     }
 }
 
-/// NetBSD keeps `shm_open` and `shm_unlink` (used by src/ipc) in librt.
+/// NetBSD keeps `shm_open` and `shm_unlink` (used by src/ipc) in librt. Zig
+/// drops `-lrt` as a libc component, and its bundled NetBSD libc includes
+/// librt, but the native libc link flags omit it, so name the system library.
 fn linkIpcPlatformLibs(step: *Step.Compile, target: ResolvedTarget) void {
-    if (target.result.os.tag == .netbsd) step.root_module.linkSystemLibrary("rt", .{});
+    if (target.result.os.tag == .netbsd and target.query.isNativeOs())
+        step.root_module.addObjectFile(.{ .cwd_relative = "/usr/lib/librt.so" });
 }
 
 const TestHostOptions = struct {
