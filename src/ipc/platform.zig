@@ -194,24 +194,8 @@ pub const posix = if (!is_windows and builtin.os.tag != .linux) struct {
 
     pub const PROT_READ = 0x01;
     pub const PROT_WRITE = 0x02;
-    /// NetBSD's PaX MPROTECT only lets `mprotect` add PROT_EXEC to a mapping
-    /// created with PROT_MPROTECT(PROT_READ | PROT_WRITE | PROT_EXEC).
-    pub const PROT_MPROTECT_RWX = if (builtin.os.tag == .netbsd) 0x7 << 3 else 0;
     pub const MAP_SHARED = 0x0001;
     pub const MAP_FAILED: *anyopaque = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
-
-    /// NetBSD 10's `struct statvfs` (3296 bytes on x86_64); only the leading fields are named.
-    pub const NetBsdStatvfs = extern struct {
-        f_flag: c_ulong,
-        f_bsize: c_ulong,
-        f_frsize: c_ulong,
-        f_iosize: c_ulong,
-        f_blocks: u64,
-        f_bfree: u64,
-        f_bavail: u64,
-        rest: [3240]u8,
-    };
-    pub extern "c" fn __statvfs90(path: [*:0]const u8, buf: *NetBsdStatvfs) c_int;
 } else struct {};
 
 /// Shared memory errors
@@ -277,17 +261,6 @@ pub fn getSystemPageSize() PageSizeError!usize {
 
     // Ensure page_size is a power of 2 (required for alignForward)
     return std.math.ceilPowerOfTwo(usize, page_size) catch 4096;
-}
-
-/// Bytes a new shared memory mapping can reserve, or null when only address
-/// space limits it. NetBSD's `shm_open` files live on the tmpfs at /var/shm,
-/// which reserves a file's whole size on `ftruncate`; a default install caps
-/// that tmpfs at a quarter of RAM.
-pub fn sharedMemoryCapacity() ?usize {
-    if (comptime builtin.os.tag != .netbsd) return null;
-    var stat: posix.NetBsdStatvfs = undefined;
-    if (posix.__statvfs90("/var/shm", &stat) != 0) return null;
-    return std.math.mul(usize, stat.f_bavail, stat.f_frsize) catch null;
 }
 
 /// Create a new anonymous shared memory mapping
@@ -535,7 +508,7 @@ fn mapMemoryWithLogging(
             const ptr = posix.mmap(
                 base_addr,
                 size,
-                posix.PROT_READ | posix.PROT_WRITE | posix.PROT_MPROTECT_RWX,
+                posix.PROT_READ | posix.PROT_WRITE,
                 posix.MAP_SHARED,
                 handle,
                 0,

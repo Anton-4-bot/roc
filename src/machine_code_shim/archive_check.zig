@@ -4,7 +4,7 @@
 //! when weak or hidden: a platform must not supply or interpose Roc internals.
 const std = @import("std");
 const symbols = @import("shim_symbols");
-const Os = enum { linux, freebsd, netbsd, openbsd, macos, windows };
+const Os = enum { linux, freebsd, openbsd, macos, windows };
 
 const ArchiveError = std.fmt.ParseIntError || error{
     DuplicateExport,
@@ -71,14 +71,10 @@ const darwin_imports = [_][]const u8{
     "pthread_threadid_np",   "read",                 "sigaction",              "sigemptyset",           "write",
     "sys_icache_invalidate",
 };
-// BSD libc's errno, mapping, signal, thread-id, TLS and stack-protector ABI.
+// FreeBSD libc's errno, mapping, signal, thread-id, TLS and stack-protector ABI.
 const freebsd_imports = c_imports ++ .{
     "__error", "__stack_chk_fail", "__stack_chk_guard", "__tls_get_addr",         "abort",     "close",
     "mmap",    "mprotect",         "munmap",            "pthread_getthreadid_np", "sigaction", "sigemptyset",
-};
-const netbsd_imports = c_imports ++ .{
-    "__errno",   "__sigaction14", "__sigemptyset14", "__stack_chk_fail", "__stack_chk_guard", "__tls_get_addr",
-    "_lwp_self", "abort",         "close",           "mmap",             "mprotect",          "munmap",
 };
 // OpenBSD uses emulated TLS and its own stack-protector symbols.
 const openbsd_imports = c_imports ++ .{
@@ -118,7 +114,6 @@ const Check = struct {
         const permitted = switch (self.os) {
             .linux => contains(&linux_imports, name),
             .freebsd => contains(&freebsd_imports, name),
-            .netbsd => contains(&netbsd_imports, name),
             .openbsd => contains(&openbsd_imports, name),
             .macos => contains(&darwin_imports, name) or contains(&c_imports, name),
             .windows => contains(&windows_imports, if (std.mem.startsWith(u8, name, "__imp_")) name[6..] else name),
@@ -184,7 +179,7 @@ fn scanArchive(bytes: []const u8, check: *Check) ArchiveError!void {
     try walkArchive(bytes, check.os, check, struct {
         fn visit(state: *Check, member: []const u8) ArchiveError!void {
             switch (state.os) {
-                .linux, .freebsd, .netbsd, .openbsd => try scanElf(member, state),
+                .linux, .freebsd, .openbsd => try scanElf(member, state),
                 .macos => try scanMachO(member, state),
                 .windows => try scanCoff(member, state),
             }
@@ -372,13 +367,11 @@ test "OS dependencies are explicit and target specific" {
     try std.testing.expectError(error.UnexpectedImport, linux.symbol("sys_icache_invalidate", false, true));
     try darwin.symbol("sys_icache_invalidate", false, true);
     var freebsd: Check = .{ .os = .freebsd };
-    var netbsd: Check = .{ .os = .netbsd };
     var openbsd: Check = .{ .os = .openbsd };
     try freebsd.symbol("pthread_getthreadid_np", false, true);
-    try netbsd.symbol("__sigaction14", false, true);
     try openbsd.symbol("__emutls_get_address", false, true);
     try std.testing.expectError(error.UnexpectedImport, freebsd.symbol("_lwp_self", false, true));
-    try std.testing.expectError(error.UnexpectedImport, netbsd.symbol("pthread_getthreadid_np", false, true));
+    try std.testing.expectError(error.UnexpectedImport, openbsd.symbol("pthread_getthreadid_np", false, true));
     try std.testing.expectError(error.UnexpectedImport, openbsd.symbol("__tls_get_addr", false, true));
     try windows.symbol("__imp_FlushInstructionCache", false, true);
     try std.testing.expectError(error.UnexpectedImport, windows.symbol("__imp_unknown", false, true));

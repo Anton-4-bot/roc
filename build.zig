@@ -307,14 +307,6 @@ fn linkWatchPlatformLibs(step: *Step.Compile, target: ResolvedTarget) void {
     }
 }
 
-/// NetBSD keeps `shm_open` and `shm_unlink` (used by src/ipc) in librt. Zig
-/// drops `-lrt` as a libc component, and its bundled NetBSD libc includes
-/// librt, but the native libc link flags omit it, so name the system library.
-fn linkIpcPlatformLibs(step: *Step.Compile, target: ResolvedTarget) void {
-    if (target.result.os.tag == .netbsd and target.query.isNativeOs())
-        step.root_module.addObjectFile(.{ .cwd_relative = "/usr/lib/librt.so" });
-}
-
 const TestHostOptions = struct {
     uses_stack_handler: bool = false,
     /// Extra source files compiled as their own objects and added to the host
@@ -4314,7 +4306,6 @@ pub fn build(b: *std.Build) void {
         cli_test.root_module.addImport("compiler_version", compiler_version_module);
         cli_test.root_module.addOptions("cli_test_helpers", cli_test_helpers);
         linkWatchPlatformLibs(cli_test, target);
-        linkIpcPlatformLibs(cli_test, target);
 
         test_suites.register(.{
             .step_suffix = "cli-main",
@@ -5640,7 +5631,6 @@ fn addMainExe(
     configureBackend(exe, target);
     exe.root_module.addImport("llvm_codegen", llvm_codegen_module);
     linkWatchPlatformLibs(exe, target);
-    linkIpcPlatformLibs(exe, target);
 
     // Create builtins object file at build time with minimal dependencies.
     // This is a plain .o (not a .a archive) since we don't bundle compiler_rt here
@@ -5874,7 +5864,6 @@ fn addMainExe(
             .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
             .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
             .{ .cpu_arch = .x86_64, .os_tag = .freebsd },
-            .{ .cpu_arch = .x86_64, .os_tag = .netbsd },
             .{ .cpu_arch = .x86_64, .os_tag = .openbsd },
             .{ .cpu_arch = .x86_64, .os_tag = .macos },
             .{ .cpu_arch = .aarch64, .os_tag = .macos },
@@ -6542,7 +6531,6 @@ const supported_deps_triples = std.StaticStringMap([]const u8).initComptime(.{
     .{ "x86_64-freebsd-none", "x86_64_freebsd_none" },
     .{ "x86_64-linux-musl", "x86_64_linux_musl" },
     .{ "x86_64-macos-none", "x86_64_macos_none" },
-    .{ "x86_64-netbsd-none", "x86_64_netbsd_none" },
     .{ "x86_64-openbsd-none", "x86_64_openbsd_none" },
     .{ "x86_64-windows-gnu", "x86_64_windows_gnu" },
     // We also support the gnu linux targets.

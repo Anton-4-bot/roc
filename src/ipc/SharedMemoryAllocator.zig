@@ -187,13 +187,8 @@ fn createWithMinSizeKind(
     page_size: usize,
     mapping_kind: MappingKind,
 ) platform.SharedMemoryError!SharedMemoryAllocator {
-    // Never ask for more than the backing filesystem can reserve.
-    const preferred = if (platform.sharedMemoryCapacity()) |capacity|
-        @min(preferred_size, std.mem.alignBackward(usize, capacity, page_size))
-    else
-        preferred_size;
-    const aligned_preferred = std.mem.alignForward(usize, preferred, page_size);
-    const aligned_min = std.mem.alignForward(usize, @min(min_size, preferred), page_size);
+    const aligned_preferred = std.mem.alignForward(usize, preferred_size, page_size);
+    const aligned_min = std.mem.alignForward(usize, @min(min_size, preferred_size), page_size);
 
     var current_size = aligned_preferred;
     while (true) {
