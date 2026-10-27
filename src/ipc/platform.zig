@@ -194,6 +194,9 @@ pub const posix = if (!is_windows and builtin.os.tag != .linux) struct {
 
     pub const PROT_READ = 0x01;
     pub const PROT_WRITE = 0x02;
+    /// NetBSD's PaX MPROTECT only lets `mprotect` add PROT_EXEC to a mapping
+    /// created with PROT_MPROTECT(PROT_READ | PROT_WRITE | PROT_EXEC).
+    pub const PROT_MPROTECT_RWX = if (builtin.os.tag == .netbsd) 0x7 << 3 else 0;
     pub const MAP_SHARED = 0x0001;
     pub const MAP_FAILED: *anyopaque = @ptrFromInt(@as(usize, @bitCast(@as(isize, -1))));
 } else struct {};
@@ -508,7 +511,7 @@ fn mapMemoryWithLogging(
             const ptr = posix.mmap(
                 base_addr,
                 size,
-                posix.PROT_READ | posix.PROT_WRITE,
+                posix.PROT_READ | posix.PROT_WRITE | posix.PROT_MPROTECT_RWX,
                 posix.MAP_SHARED,
                 handle,
                 0,

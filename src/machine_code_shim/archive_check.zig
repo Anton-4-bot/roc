@@ -4,7 +4,7 @@
 //! when weak or hidden: a platform must not supply or interpose Roc internals.
 const std = @import("std");
 const symbols = @import("shim_symbols");
-const Os = enum { linux, macos, windows };
+const Os = enum { linux, freebsd, netbsd, openbsd, macos, windows };
 
 const ArchiveError = std.fmt.ParseIntError || error{
     DuplicateExport,
@@ -71,6 +71,20 @@ const darwin_imports = [_][]const u8{
     "pthread_threadid_np",   "read",                 "sigaction",              "sigemptyset",           "write",
     "sys_icache_invalidate",
 };
+// BSD libc's errno, mapping, signal, thread-id, TLS and stack-protector ABI.
+const freebsd_imports = c_imports ++ .{
+    "__error", "__stack_chk_fail", "__stack_chk_guard", "__tls_get_addr",         "abort",     "close",
+    "mmap",    "mprotect",         "munmap",            "pthread_getthreadid_np", "sigaction", "sigemptyset",
+};
+const netbsd_imports = c_imports ++ .{
+    "__errno",   "__sigaction14", "__sigemptyset14", "__stack_chk_fail", "__stack_chk_guard", "__tls_get_addr",
+    "_lwp_self", "abort",         "close",           "mmap",             "mprotect",          "munmap",
+};
+// OpenBSD uses emulated TLS and its own stack-protector symbols.
+const openbsd_imports = c_imports ++ .{
+    "__emutls_get_address", "__errno", "__guard_local", "__stack_smash_handler", "abort",     "close",
+    "getthrid",             "mmap",    "mprotect",      "munmap",                "sigaction", "sigemptyset",
+};
 const windows_imports = c_imports ++ .{
     // Kernel32/ntdll APIs used by the mapping and minimal std.Io implementations.
     "CloseHandle",                       "CreateFileW",                "FlushInstructionCache",   "GetLastError",
@@ -103,6 +117,9 @@ const Check = struct {
         if (contains(&imports, name)) return;
         const permitted = switch (self.os) {
             .linux => contains(&linux_imports, name),
+            .freebsd => contains(&freebsd_imports, name),
+            .netbsd => contains(&netbsd_imports, name),
+            .openbsd => contains(&openbsd_imports, name),
             .macos => contains(&darwin_imports, name) or contains(&c_imports, name),
             .windows => contains(&windows_imports, if (std.mem.startsWith(u8, name, "__imp_")) name[6..] else name),
         };
@@ -167,7 +184,7 @@ fn scanArchive(bytes: []const u8, check: *Check) ArchiveError!void {
     try walkArchive(bytes, check.os, check, struct {
         fn visit(state: *Check, member: []const u8) ArchiveError!void {
             switch (state.os) {
-                .linux => try scanElf(member, state),
+                .linux, .freebsd, .netbsd, .openbsd => try scanElf(member, state),
                 .macos => try scanMachO(member, state),
                 .windows => try scanCoff(member, state),
             }
@@ -233,10 +250,12 @@ fn scanElfClass(comptime Word: type, bytes: []const u8, check: *Check) ArchiveEr
     const shnum = try int(u16, bytes, if (wide) 60 else 48);
     if (shsize != section_size or shnum == 0) return error.MalformedObject;
     const sections = try slice(bytes, shoff, @as(usize, shnum) * shsize);
+    // Only the freestanding Linux shim lacks TLS; BSD hosts link libc, which installs it.
+    const tls_allowed = check.os != .linux;
     var found_table = false;
     for (0..shnum) |i| {
         const sh = sections[i * shsize ..][0..section_size];
-        if (try int(Word, sh, 8) & std.elf.SHF_TLS != 0) return error.UnexpectedTls;
+        if (!tls_allowed and try int(Word, sh, 8) & std.elf.SHF_TLS != 0) return error.UnexpectedTls;
         if (try int(u32, sh, 4) != std.elf.SHT_SYMTAB) continue;
         found_table = true;
         const link = try int(u32, sh, if (wide) 40 else 24);
@@ -252,7 +271,7 @@ fn scanElfClass(comptime Word: type, bytes: []const u8, check: *Check) ArchiveEr
             const info = sym[if (wide) 4 else 12];
             // Local TLS is equally invalid: it still needs the host to install
             // a TLS image, even when codegen does not call a global resolver.
-            if (info & 0xf == std.elf.STT_TLS) return error.UnexpectedTls;
+            if (!tls_allowed and info & 0xf == std.elf.STT_TLS) return error.UnexpectedTls;
             const bind = info >> 4;
             if (bind == std.elf.STB_LOCAL) continue;
             const name = try string(strings, try int(u32, sym, 0));

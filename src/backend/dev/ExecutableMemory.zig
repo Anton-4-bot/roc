@@ -375,11 +375,16 @@ fn classifyMemoryOs(os: std.Target.Os.Tag) MemoryOs {
     };
 }
 
+/// NetBSD's PaX MPROTECT only lets `mprotect` add PROT_EXEC to a mapping
+/// created with PROT_MPROTECT(PROT_READ | PROT_WRITE | PROT_EXEC).
+const netbsd_prot_mprotect_rwx: u32 = 0x7 << 3;
+
 /// Allocate memory that can be made executable
 fn allocateMemory(size: usize) (Allocator.Error || error{ MmapFailed, VirtualAllocFailed, UnsupportedPlatform })![]align(std.heap.page_size_min) u8 {
     switch (comptime classifyMemoryOs(builtin.os.tag)) {
         .posix => {
-            const prot: std.posix.PROT = .{ .READ = true, .WRITE = true };
+            var prot: std.posix.PROT = .{ .READ = true, .WRITE = true };
+            if (builtin.os.tag == .netbsd) prot = @bitCast(@as(u32, @bitCast(prot)) | netbsd_prot_mprotect_rwx);
             const flags = std.posix.MAP{ .TYPE = .PRIVATE, .ANONYMOUS = true };
             const result = std.posix.mmap(null, size, prot, flags, -1, 0) catch {
                 return error.MmapFailed;

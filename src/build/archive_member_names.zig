@@ -14,11 +14,11 @@
 //! inline and pass through unchanged. Every other byte of every member is
 //! kept, so the archive links exactly as before.
 //!
-//! Usage: archive_member_names <linux|macos|windows> <input> <output>
+//! Usage: archive_member_names <linux|freebsd|netbsd|openbsd|macos|windows> <input> <output>
 
 const std = @import("std");
 
-const Os = enum { linux, macos, windows };
+const Os = enum { linux, freebsd, netbsd, openbsd, macos, windows };
 
 const RewriteError = error{
     NotAnArchive,
