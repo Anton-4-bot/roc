@@ -371,6 +371,15 @@ test "OS dependencies are explicit and target specific" {
     try std.testing.expectError(error.UnexpectedImport, linux.symbol("___tls_get_addr", false, true));
     try std.testing.expectError(error.UnexpectedImport, linux.symbol("sys_icache_invalidate", false, true));
     try darwin.symbol("sys_icache_invalidate", false, true);
+    var freebsd: Check = .{ .os = .freebsd };
+    var netbsd: Check = .{ .os = .netbsd };
+    var openbsd: Check = .{ .os = .openbsd };
+    try freebsd.symbol("pthread_getthreadid_np", false, true);
+    try netbsd.symbol("__sigaction14", false, true);
+    try openbsd.symbol("__emutls_get_address", false, true);
+    try std.testing.expectError(error.UnexpectedImport, freebsd.symbol("_lwp_self", false, true));
+    try std.testing.expectError(error.UnexpectedImport, netbsd.symbol("pthread_getthreadid_np", false, true));
+    try std.testing.expectError(error.UnexpectedImport, openbsd.symbol("__tls_get_addr", false, true));
     try windows.symbol("__imp_FlushInstructionCache", false, true);
     try std.testing.expectError(error.UnexpectedImport, windows.symbol("__imp_unknown", false, true));
 }
@@ -522,11 +531,15 @@ test "ELF parser checks weak imports, hidden exports, and missing tables" {
     try std.testing.expectError(error.UnexpectedExport, scanElf(&bytes, &check));
     bytes[sym + 4] = @as(u8, std.elf.STB_LOCAL) << 4;
     try scanElf(&bytes, &check);
+    // BSD shims link libc, which installs their TLS; only Linux rejects it.
+    var bsd: Check = .{ .os = .freebsd };
     bytes[sym + 4] |= std.elf.STT_TLS;
     try std.testing.expectError(error.UnexpectedTls, scanElf(&bytes, &check));
+    try scanElf(&bytes, &bsd);
     bytes[sym + 4] = @as(u8, std.elf.STB_LOCAL) << 4;
     putInt(u64, &bytes, 64 + 8, std.elf.SHF_TLS);
     try std.testing.expectError(error.UnexpectedTls, scanElf(&bytes, &check));
+    try scanElf(&bytes, &bsd);
     putInt(u64, &bytes, 64 + 8, 0);
     putInt(u32, &bytes, sym_section + 4, std.elf.SHT_NULL);
     try std.testing.expectError(error.MissingSymbolTable, scanElf(&bytes, &check));
