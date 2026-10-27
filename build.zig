@@ -307,6 +307,11 @@ fn linkWatchPlatformLibs(step: *Step.Compile, target: ResolvedTarget) void {
     }
 }
 
+/// NetBSD keeps `shm_open` and `shm_unlink` (used by src/ipc) in librt.
+fn linkIpcPlatformLibs(step: *Step.Compile, target: ResolvedTarget) void {
+    if (target.result.os.tag == .netbsd) step.root_module.linkSystemLibrary("rt", .{});
+}
+
 const TestHostOptions = struct {
     uses_stack_handler: bool = false,
     /// Extra source files compiled as their own objects and added to the host
@@ -4306,6 +4311,7 @@ pub fn build(b: *std.Build) void {
         cli_test.root_module.addImport("compiler_version", compiler_version_module);
         cli_test.root_module.addOptions("cli_test_helpers", cli_test_helpers);
         linkWatchPlatformLibs(cli_test, target);
+        linkIpcPlatformLibs(cli_test, target);
 
         test_suites.register(.{
             .step_suffix = "cli-main",
@@ -5631,6 +5637,7 @@ fn addMainExe(
     configureBackend(exe, target);
     exe.root_module.addImport("llvm_codegen", llvm_codegen_module);
     linkWatchPlatformLibs(exe, target);
+    linkIpcPlatformLibs(exe, target);
 
     // Create builtins object file at build time with minimal dependencies.
     // This is a plain .o (not a .a archive) since we don't bundle compiler_rt here
